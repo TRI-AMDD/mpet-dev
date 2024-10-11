@@ -8,12 +8,12 @@ Prerequisites
   * numpy, scipy, matplotlib, pyqt5, h5py, configparser, schema
   * daetools
 
-Install via PyPi
+Install via pip
 -----------------------------
 
-MPET is available on PyPi, the Python Packaging Index, and can be installed with:
+The latest version MPET can be installed directly from Github with the following command:
 
-``pip install mpet``
+``pip install git+https://github.com/TRI-AMDD/mpet.git``
 
 Install from source
 ----------------------------
