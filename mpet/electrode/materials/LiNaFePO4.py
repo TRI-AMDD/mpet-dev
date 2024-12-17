@@ -17,14 +17,24 @@ def mu(x, y, Lxs, Lys, Lxy, Lxyv):
 
 def LiNaFePO4(self, y, ybar, T, muR_ref):
     """ Ombrini 2024 """
-    muRtheta1 = -self.eokT*0.3
-    muRtheta2 = -self.eokT*0.1
+    # muRtheta1 = -self.eokT*0.208
+    muRtheta1 = -self.eokT*0.208
+    # muRtheta2 = -self.eokT*0.075
+    # muRtheta2 = -self.eokT*0.06 # from Ian fitting NFP
+    # muRtheta2 = -self.eokT*0.06 # from Ian fitting NFP
+    muRtheta2 = -self.eokT*self.get_trode_param('v_2')
+    # muRtheta2 = -self.eokT*0.06
     y1, y2 = y
-    Omga = self.get_trode_param('Omega_a')
+    # Omga = self.get_trode_param('Omega_a')
     Lnali = self.get_trode_param('Omega_b')
     Lnalivac = self.get_trode_param('Omega_c')
-    L_Li = [Omga]
-    L_Na = [0.94502646, 8.02136736, 5.35420982, -15.21264346, -4.0081790, 7.62295359]
+    # L_Li = [Omga]
+    L_Li = [3.97034583, 0.09673699, 1.11037291, -0.15444768]
+    L_Na = [0.94502646, 8.02136736, 5.35420982, -15.21264346, -4.0081790, 7.62295359] # big dV from paper of GITT 10n part
+    # L_Na = [-1, 7.1, 2.9, -11.2, -1.67, 4.57] # small dV from fitting NFP Ian
+    # L_Na = [  1.11101506 ,  9.0959113 ,  15.71249686 ,  1.72103692, -10.8449572, -9.38755838] # based on big difference 600 nm Part Ian
+
+    # L_Na = [3]
 
     muLihom = mu(y1, y2, L_Li, L_Na, Lnali, Lnalivac)
     muNahom = mu(y2, y1, L_Na, L_Li, Lnali, Lnalivac)

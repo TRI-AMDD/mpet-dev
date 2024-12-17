@@ -158,24 +158,57 @@ class muRfuncs():
             ybar_avg = ybar[0]+ybar[1]
             N = len(y[0])
             kappa1 = kappa[0]
+            # print('kappa1',kappa1)
             kappa2 = kappa[1]
+            kappa12 = kappa[2]
             B1 = B[0]
             B2 = B[1]
-            B_avg = B1 + B2
+            y1 = y[0]
+            y2 = y[1]
             ytmp1 = np.empty(N+2, dtype=object)
-            ytmp1[1:-1] = y[0]
-            ytmp1[0] = ywet[0]
-            ytmp1[-1] = ywet[0]
-            dxs = 1./N
-            curv1 = np.diff(ytmp1, 2)/(dxs**2)
-            
+            ytmp1[1:-1] = y1
             ytmp2 = np.empty(N+2, dtype=object)
-            ytmp2[1:-1] = y[1]
-            ytmp2[0] = ywet[1]
-            ytmp2[-1] = ywet[1]
+            ytmp2[1:-1] = y2
+            dxs = 1./N
+
+            if self.get_trode_param("natural_bc"):
+                beta_s1 = self.get_trode_param("beta_s1")
+                beta_s2 = self.get_trode_param("beta_s2")
+
+                ytmp1[0] = y1[0] + dxs*y1[0]*(1-y1[0]-y2[0])*6*beta_s1
+                ytmp1[-1] = y1[-1] + dxs*y1[-1]*(1-y1[-1]-y2[-1])*6*beta_s1
+
+                ytmp2[0] = y2[0] + dxs*y2[0]*(1-y2[0]-y1[0])*6*beta_s2
+                ytmp2[-1] = y2[-1] + dxs*y2[-1]*(1-y2[-1]-y1[-1])*6*beta_s2
+
+            elif self.get_trode_param("natural_bc_c"):
+
+                beta_s1 = self.get_trode_param("beta_s1")
+                beta_s2 = self.get_trode_param("beta_s2")
+
+                ytmp1[0] = y1[0] + dxs*beta_s1
+                ytmp1[-1] = y1[-1] + dxs*beta_s1
+
+                ytmp2[0] = y2[0] + dxs*beta_s2
+                ytmp2[-1] = y2[-1] + dxs*beta_s2
+            else:
+                ytmp1[0] = ywet[0]
+                ytmp1[-1] = ywet[0]
+                ytmp2[0] = 0.98 - ywet[0]
+                ytmp2[-1] = 0.98 - ywet[0]
+            
+            curv1 = np.diff(ytmp1, 2)/(dxs**2)
             curv2 = np.diff(ytmp2, 2)/(dxs**2)
-            muR1_nh = -kappa1*curv1 + (B1*y[0]+B2*y[1] - ybar_avg)
-            muR2_nh = -kappa2*curv2 + (B1*y[0]+B2*y[1] - ybar_avg)
+            # muR1_nh = -kappa1*curv1 + B1*(y1 - ybar_avg)
+            # muR2_nh = -kappa2*curv2 + B2*(y2 - ybar_avg)
+            # muR1_nh = -kappa1*curv1 + (B1*y[0]+B2*y[1] - (B1*ybar[0]+B2*ybar[1]))
+            # muR2_nh = -kappa2*curv2 + (B1*y[0]+B2*y[1] - (B1*ybar[0]+B2*ybar[1]))
+            muR1_nh = -kappa1*curv1 - kappa12*curv2
+            muR1_nh += (B1*y1+np.sqrt(B1*B2)*y2 - (B1*ybar[0]+np.sqrt(B1*B2)*ybar[1]))
+            muR2_nh = -kappa2*curv2 - kappa12*curv1
+            muR2_nh += (np.sqrt(B1*B2)*y1+B2*y2 - (np.sqrt(B1*B2)*ybar[0]+B2*ybar[1]))
+            # muR1_nh = -kappa1*curv1 + (B1*y[0]+np.sqrt(B1*B2)*y[1] - (B1+np.sqrt(B1*B2))*(ybar[0]+ybar[1]))
+            # muR2_nh = -kappa2*curv2 + (np.sqrt(B1*B2)*y[0]+B2*y[1] - (np.sqrt(B1*B2)+B2)*(ybar[0]+ybar[1]))
 
             muR_nh = (muR1_nh, muR2_nh)
         return muR_nh
@@ -243,9 +276,10 @@ class muRfuncs():
                     if self.get_trode_param("kappa1") is not None:
                         kappa1 = self.get_trode_param("kappa1")
                         kappa2 = self.get_trode_param("kappa2")
+                        kappa12 = self.get_trode_param("kappa12")
                     else:
                         kappa1 = kappa2 = self.get_trode_param("kappa")
-                    kappa = (kappa1,kappa2)
+                    kappa = (kappa1,kappa2, kappa12)
                     if self.get_trode_param("B1") is not None:
                         B1 = self.get_trode_param("B1")
                         B2 = self.get_trode_param("B2")
