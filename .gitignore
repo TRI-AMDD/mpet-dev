@@ -18,6 +18,7 @@
 
 # Ignore general simulation output stuff
 history/
+Li_extr/
 sim_output*
 
 #Ignore test outputs but not ref_outputs

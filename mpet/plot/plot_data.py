@@ -591,8 +591,8 @@ def show_data(indir, plot_type, print_flag, save_flag, data_only, vOut=None, pOu
                     lbl3 = r"$\overline{c}$"
                     numy = len(datay1) if isinstance(datay1, np.ndarray) else 1
                     datax = np.linspace(0, lens[pInd,vInd] * Lfac, numy)
-                    line1, = ax[pInd,vInd].plot(datax, datay1, label=lbl1)
-                    line2, = ax[pInd,vInd].plot(datax, datay2, label=lbl2)
+                    line1, = ax[pInd,vInd].plot(datax, datay1, label=lbl1, linewidth=3)
+                    line2, = ax[pInd,vInd].plot(datax, datay2, label=lbl2, linewidth=3)
                     if plt_cavg:
                         line3, = ax[pInd,vInd].plot(datax, datay3, '--', label=lbl3)
                         lines3[pInd,vInd] = line3
@@ -609,7 +609,7 @@ def show_data(indir, plot_type, print_flag, save_flag, data_only, vOut=None, pOu
                 ax[pInd,vInd].set_ylim(ylim)
                 ax[pInd,vInd].set_xlim((0, lens[pInd,vInd] * Lfac))
                 if plt_axlabels:
-                    ax[pInd, vInd].set_xlabel(r"$r$ [{Lunit}]".format(Lunit=Lunit))
+                    ax[pInd, vInd].set_xlabel(r"$x$ [{Lunit}]".format(Lunit=Lunit))
                     if plot_type[0] == "c":
                         ax[pInd, vInd].set_ylabel(r"$\widetilde{{c}}$")
                     elif plot_type[:2] == "mu":

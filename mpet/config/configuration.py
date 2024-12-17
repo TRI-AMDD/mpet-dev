@@ -546,6 +546,8 @@ class Config:
                 self[trode, 'B1'] = self[trode, 'B1'] / (kT * constants.N_A * self[trode, 'csmax'])
             if self[trode, 'B2'] is not None:
                 self[trode, 'B2'] = self[trode, 'B2'] / (kT * constants.N_A * self[trode, 'csmax'])
+            if self[trode, 'v_2'] is not None:
+                self[trode, 'v_2'] = self[trode, 'v_2']
             for param in ['Omega_a', 'Omega_b', 'Omega_c', 'EvdW']:
                 value = self[trode, param]
                 if value is not None:
@@ -670,19 +672,28 @@ class Config:
             if not np.all(self['specified_psd'][trode]):
                 # If PSD is not specified, make a length-sampled particle size distribution
                 # Log-normally distributed
-                mean = self['mean'][trode]
-                stddev = self['stddev'][trode]
-                if np.allclose(stddev, 0., atol=1e-12):
-                    raw = mean * np.ones((Nvol, Npart))
+                mean_l = self['mean'][trode]
+                stddev_l = self['stddev'][trode]
+                mean_t = self[trode, 'thickness']
+                stddev_t = self[trode, 'std_thickness']
+                if np.allclose(stddev_l, 0., atol=1e-12):
+                    raw_l = mean_l * np.ones((Nvol, Npart))
                 else:
-                    var = stddev**2
-                    mu = np.log((mean**2) / np.sqrt(var + mean**2))
-                    sigma = np.sqrt(np.log(var/(mean**2) + 1))
-                    raw = np.random.lognormal(mu, sigma, size=(Nvol, Npart))
+                    var_l = stddev_l**2
+                    mu = np.log((mean_l**2) / np.sqrt(var_l + mean_l**2))
+                    sigma = np.sqrt(np.log(var_l/(mean_l**2) + 1))
+                    raw_l = np.random.lognormal(mu, sigma, size=(Nvol, Npart))
+                if np.allclose(stddev_t, 0., atol=1e-12):
+                    raw_t = mean_t * np.ones((Nvol, Npart))
+                else:
+                    var_t = stddev_t**2
+                    mu = np.log((mean_t**2) / np.sqrt(var_t + mean_t**2))
+                    sigma = np.sqrt(np.log(var_t/(mean_t**2) + 1))
+                    raw_t = np.random.lognormal(mu, sigma, size=(Nvol, Npart))
             else:
                 # use user-defined PSD
-                raw = self['specified_psd'][trode]
-                if raw.shape != (Nvol, Npart):
+                raw_l = self['specified_psd'][trode]
+                if raw_l.shape != (Nvol, Npart):
                     raise ValueError('Specified particle size distribution discretization '
                                      'of volumes inequal to the one specified in the config file')
 
@@ -690,17 +701,17 @@ class Config:
             # integers -- number of steps
             solidDisc = self[trode, 'discretization']
             if solidType in ['ACR', 'ACR2']:
-                psd_num = np.ceil(raw / solidDisc).astype(int)
+                psd_num = np.ceil(raw_l / solidDisc).astype(int)
                 psd_len = solidDisc * psd_num
             elif solidType in ['CHR', 'diffn', 'CHR2', 'diffn2']:
-                psd_num = np.ceil(raw / solidDisc).astype(int) + 1
+                psd_num = np.ceil(raw_l / solidDisc).astype(int) + 1
                 psd_len = solidDisc * (psd_num - 1)
             # For homogeneous particles (only one 'volume' per particle)
             elif solidType in ['homog', 'homog_sdn', 'homog2', 'homog2_sdn']:
                 # Each particle is only one volume
-                psd_num = np.ones(raw.shape, dtype=int)
+                psd_num = np.ones(raw_l.shape, dtype=int)
                 # The lengths are given by the original length distr.
-                psd_len = raw
+                psd_len = raw_l
             else:
                 raise NotImplementedError(f'Unknown solid type: {solidType}')
 
@@ -711,7 +722,8 @@ class Config:
                 psd_vol = (4. / 3) * np.pi * psd_len**3
             elif solidShape == 'C3':
                 psd_area = 2 * 1.2263 * psd_len**2
-                psd_vol = 1.2263 * psd_len**2 * self[trode, 'thickness']
+                # psd_vol = 1.2263 * psd_len**2 * self[trode, 'thickness']
+                psd_vol = 1.2263 * psd_len**2 * raw_t
             elif solidShape == 'cylinder':
                 psd_area = 2 * np.pi * psd_len * self[trode, 'thickness']
                 psd_vol = np.pi * psd_len**2 * self[trode, 'thickness']
@@ -912,14 +924,26 @@ class Config:
                                       * self[trode, 'csmax'] * plen**2)
                         self[trode, 'indvPart']['kappa2'][i, j] = (self[trode, 'kappa2']
                                                                    / kappa_ref2)
+                    if self[trode, 'kappa12'] is not None:
+                        kappa_ref12 = (constants.k * constants.T_ref * constants.N_A
+                                      * self[trode, 'csmax'] * plen**2)
+                        self[trode, 'indvPart']['kappa12'][i, j] = (self[trode, 'kappa12']
+                                                                   / kappa_ref12)
                     if self[trode, 'dgammadc'] is not None:
                         nd_dgammadc = self[trode, 'dgammadc'] * cs_ref_part / gamma_S_ref
                         if self[trode, 'kappa'] is not None:
                             self[trode, 'indvPart']['beta_s'][i, j] = nd_dgammadc \
                                 / self[trode, 'indvPart']['kappa'][i, j]
-                        if self[trode, 'kappa1'] is not None:
-                            self[trode, 'indvPart']['beta_s'][i, j] = nd_dgammadc \
-                                / self[trode, 'indvPart']['kappa1'][i, j]
+                            
+                    if self[trode, 'dgammadc_1'] is not None:
+                        nd_dgammadc1 = self[trode, 'dgammadc_1'] * cs_ref_part / gamma_S_ref
+                        self[trode, 'indvPart']['beta_s1'][i, j] = nd_dgammadc1 \
+                            / self[trode, 'indvPart']['kappa1'][i, j]
+
+                        nd_dgammadc2 = self[trode, 'dgammadc_2'] * cs_ref_part / gamma_S_ref
+                        self[trode, 'indvPart']['beta_s2'][i, j] = nd_dgammadc2 \
+                            / self[trode, 'indvPart']['kappa2'][i, j]
+                        
                     if self[trode, 'D'] is not None:
                         self[trode, 'indvPart']['D'][i, j] = self[trode, 'D'] \
                             * self['t_ref'] / plen**2
@@ -943,12 +967,18 @@ class Config:
                         self[trode, 'indvPart']['k0'][i, j] = self[trode, 'k0'] \
                             / (constants.e * F_s_ref)
                     if self[trode, 'k0_1'] is not None:
+                        random_factor_1 = np.random.normal(1, 0.1)
+                        if random_factor_1 < 0:
+                            random_factor_1 = 0.01
                         F_s_1ref = plen * constants.N_A * self[trode, 'csmax'] / self['t_ref']
-                        self[trode, 'indvPart']['k0_1'][i, j] = self[trode, 'k0_1'] \
+                        self[trode, 'indvPart']['k0_1'][i, j] = self[trode, 'k0_1']*random_factor_1 \
                             / (constants.e * F_s_1ref)
                     if self[trode, 'k0_2'] is not None:
+                        random_factor_2 = np.random.normal(1, 0.1)
+                        if random_factor_2 < 0:
+                            random_factor_2 = 0.01
                         F_s_2ref = plen * constants.N_A * self[trode, 'csmax'] / self['t_ref']
-                        self[trode, 'indvPart']['k0_2'][i, j] = self[trode, 'k0_2'] \
+                        self[trode, 'indvPart']['k0_2'][i, j] = self[trode, 'k0_2']*random_factor_2 \
                             / (constants.e * F_s_2ref)
                     self[trode, 'indvPart']['E_A'][i, j] = self[trode, 'E_A'] \
                         / (constants.k * constants.N_A * constants.T_ref)

@@ -66,10 +66,14 @@ class Mod2cat(dae.daeModel):
             self.Rxn2 = dae.daeVariable("Rxn2", dae.no_t, self, "Rate of reaction 2", [self.Dmn])
 
         # Get reaction rate function
-        rxnType = config[trode, "rxnType"]
-        self.calc_rxn_rate = utils.import_function(config[trode, "rxnType_filename"],
-                                                   rxnType,
-                                                   f"mpet.electrode.reactions.{rxnType}")
+        rxnType_1 = config[trode, "rxnType_1"]
+        self.calc_rxn_rate_1 = utils.import_function(config[trode, "rxnType_filename"],
+                                                   rxnType_1,
+                                                   f"mpet.electrode.reactions.{rxnType_1}")
+        rxnType_2 = config[trode, "rxnType_2"]
+        self.calc_rxn_rate_2 = utils.import_function(config[trode, "rxnType_filename"],
+                                                   rxnType_2,
+                                                   f"mpet.electrode.reactions.{rxnType_2}")
 
         # Ports
         self.portInLyte = ports.portFromElyte_mcat(
@@ -228,8 +232,17 @@ class Mod2cat(dae.daeModel):
                                                     self.ind)
             mu1R_surf, act1R_surf = mu1R, act1R
             mu2R_surf, act2R_surf = mu2R, act2R
-            c1_surf = c1
-            c2_surf = c2
+            
+            # Gamma_1 = 0.3
+            # Gamma_2 = 1
+            # c1_surf = c1 -(c1**(1+Gamma_1))*((1-c1)**Gamma_1)
+            # c2_surf = c2 -(c2**(1+Gamma_2))*((1-c2)**Gamma_2)
+
+            c1_surf = c1 
+            # c1_surf = 0.09*np.ones_like(c1)
+            c2_surf = c2 
+            # c2_surf = 0.05*np.ones_like(c2)
+
         eta1 = calc_eta(mu1R_surf, muO_1)
         eta2 = calc_eta(mu2R_surf, muO_2)
         if self.get_trode_param("type") in ["ACR2"]:
@@ -240,24 +253,16 @@ class Mod2cat(dae.daeModel):
         else:
             eta1_eff = eta1 + self.Rxn1()*self.get_trode_param("Rfilm")
             eta2_eff = eta2 + self.Rxn2()*self.get_trode_param("Rfilm")
-        if self.get_trode_param("lambda_1") is not None:
-            Rxn1 = self.calc_rxn_rate(
-                eta1_eff, c1_surf, self.c_lyte_1(), self.get_trode_param("k0_1"),
-                self.get_trode_param("E_A"), self.T_lyte(), act1R_surf, act_lyte_1,
-                self.get_trode_param("lambda_1"), self.get_trode_param("alpha"))
-            Rxn2 = self.calc_rxn_rate(
-                eta2_eff, c2_surf, self.c_lyte_2(), self.get_trode_param("k0_2"),
-                self.get_trode_param("E_A"), self.T_lyte(), act2R_surf, act_lyte_2,
-                self.get_trode_param("lambda_2"), self.get_trode_param("alpha"))
-        else:
-            Rxn1 = self.calc_rxn_rate(
-                eta1_eff, c1_surf, self.c_lyte_1(), self.get_trode_param("k0"),
-                self.get_trode_param("E_A"), self.T_lyte(), act1R_surf, act_lyte_1,
-                self.get_trode_param("lambda"), self.get_trode_param("alpha"))
-            Rxn2 = self.calc_rxn_rate(
-                eta2_eff, c2_surf, self.c_lyte_2(), self.get_trode_param("k0"),
-                self.get_trode_param("E_A"), self.T_lyte(), act2R_surf, act_lyte_2,
-                self.get_trode_param("lambda"), self.get_trode_param("alpha"))
+
+        Rxn1 = self.calc_rxn_rate_1(
+            eta1_eff, c1_surf, c2_surf, self.c_lyte_1(), self.get_trode_param("k0_1"),
+            self.get_trode_param("E_A"), self.T_lyte(), act1R_surf, act_lyte_1,
+            self.get_trode_param("lambda_1"), self.get_trode_param("alpha"))
+        Rxn2 = self.calc_rxn_rate_2(
+            eta2_eff, c2_surf, c1_surf, self.c_lyte_2(), self.get_trode_param("k0_1")/self.get_trode_param("k012_ratio"),
+            self.get_trode_param("E_A"), self.T_lyte(), act2R_surf, act_lyte_2,
+            self.get_trode_param("lambda_2"), self.get_trode_param("alpha"))
+        
         if self.get_trode_param("type") in ["ACR2"]:
             for i in range(N):
                 eq1 = self.CreateEquation("Rxn1_{i}".format(i=i))
@@ -308,11 +313,13 @@ class Mod2cat(dae.daeModel):
         LHS1_vec = MX(Mmat, dc1dt_vec)
         LHS2_vec = MX(Mmat, dc2dt_vec)
         if self.get_trode_param("surface_diffusion") and self.get_trode_param("type") in ["ACR2"]:
-            surf_diff_vec1 = calc_surf_diff(c1_surf, mu1R_surf,
+            surf_diff_vec1 = calc_surf_diff(c1_surf, c2_surf, 
+                                            mu1R_surf, mu2R_surf,
                                            self.get_trode_param("D_surf"),
                                            self.get_trode_param("E_D_surf"),
                                            self.T_lyte())
-            surf_diff_vec2 = calc_surf_diff(c2_surf, mu2R_surf,
+            surf_diff_vec2 = calc_surf_diff(c2_surf, c1_surf, 
+                                            mu2R_surf, mu1R_surf,
                                            self.get_trode_param("D_surf"),
                                            self.get_trode_param("E_D_surf"),
                                            self.T_lyte())
@@ -894,15 +901,18 @@ def calc_eta(muR, muO):
     return muR - muO
 
 
-def calc_surf_diff(c_surf, muR_surf, D_surf, E_D_surf, T):
+def calc_surf_diff(c_surf, c2_surf, muR1_surf, muR2_surf, D_surf, E_D_surf, T):
     # the surface diffusion keeps the volume centered method of the ACR
     N = np.size(c_surf)
     dxs = 1./N
-    D_eff = (D_surf/(T) * np.exp(-E_D_surf/(T)
+    D_eff = (D_surf * np.exp(-E_D_surf/(T)
              + E_D_surf/1))
     c_edges = utils.mean_linear(c_surf)
+    c2_edges = utils.mean_linear(c2_surf)
     surf_flux = np.empty(N+1, dtype=object)
-    surf_flux[1:-1] = -D_eff*c_edges*(1-c_edges)*np.diff(muR_surf)/(dxs)
+    surf_flux[1:-1] = -D_eff*c_edges*(1-c_edges-c2_edges)*np.diff(muR1_surf)/(dxs)
+    # surf_flux[1:-1] = -D_eff*c_edges*(1-c_edges-c2_edges)*np.diff(muR1_surf)/(dxs)
+    # surf_flux[1:-1] += D_eff*c2_edges*np.diff(muR2_surf)/(dxs)
     surf_flux[0] = 0.
     surf_flux[-1] = 0.
     surf_diff = -np.diff(surf_flux)/dxs
@@ -1013,12 +1023,12 @@ def calc_flux_CHR2_multicat(c1, c2, mu1_R, mu2_R, D1, D2, Dfunc, E_D,
     c2_edges = utils.mean_linear(c2)
     cavg_edges = (c1_edges + c2_edges)/2
     if noise1 is None:
-        Flux1_vec[1:N] = -D1/T * Dfunc(c1_edges) * np.exp(-E_D/T + E_D/1) * np.diff(mu1_R)/dr
-        Flux2_vec[1:N] = -D2/T * Dfunc(c2_edges) * np.exp(-E_D/T + E_D/1) * np.diff(mu2_R)/dr
+        Flux1_vec[1:N] = -D1/T * c1_edges * (1-c1_edges-c2_edges) * np.exp(-E_D/T + E_D/1) * np.diff(mu1_R)/dr
+        Flux2_vec[1:N] = -D2/T * c2_edges * (1-c2_edges-c1_edges) * np.exp(-E_D/T + E_D/1) * np.diff(mu2_R)/dr
     else:
-        Flux1_vec[1:N] = -D1/T * Dfunc(c1_edges) * np.exp(-E_D/T + E_D/1) * \
+        Flux1_vec[1:N] = -D1/T * c1_edges * (1-c1_edges-c2_edges) * np.exp(-E_D/T + E_D/1) * \
             np.diff(mu1_R+noise1(dae.Time().Value))/dr
-        Flux2_vec[1:N] = -D2/T * Dfunc(c2_edges) * np.exp(-E_D/T + E_D/1) * \
+        Flux2_vec[1:N] = -D2/T * c2_edges * (1-c2_edges-c1_edges) * np.exp(-E_D/T + E_D/1) * \
             np.diff(mu2_R+noise2(dae.Time().Value))/dr
     return Flux1_vec, Flux2_vec
 
