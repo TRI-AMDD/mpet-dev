@@ -71,7 +71,37 @@ class SimMPET(dae.daeSimulation):
                 cs2 = config['cs2'][tr]
                 self.m.ffrac[tr].SetInitialGuess(cs1+cs2)
                 # Guess initial filling fractions
-                
+                mosaic = config["mosaic_1"]
+                if mosaic:
+                    # list of int(cs1) particles with c1 = 0.9 among the matrix Nvol x Npart
+                    part_list = [(i, j) for i in range(Nvol[tr]) for j in range(Npart[tr])]
+                    np.random.shuffle(part_list)
+                    for i, j in part_list[:int(cs1*len(part_list))]:
+                        self.m.particles[tr][i, j].c1bar.SetInitialGuess(0.9)
+                        self.m.particles[tr][i, j].c2bar.SetInitialGuess(cs2)
+                        Nij = config["psd_num"][tr][i,j]
+                        epsrnd = 0
+                        rnd1 = epsrnd*(np.random.rand(Nij) - 0.5)
+                        rnd2 = epsrnd*(np.random.rand(Nij) - 0.5)
+                        rnd1 -= np.mean(rnd1)
+                        rnd2 -= np.mean(rnd2)
+                        for k in range(Nij):
+                            self.m.particles[tr][i,j].c1.SetInitialCondition(k, 0.9+rnd1[k])
+                            self.m.particles[tr][i, j].c2.SetInitialCondition(k, cs2)
+
+                    for i, j in part_list[int(cs1*len(part_list)):]:
+                        self.m.particles[tr][i, j].c1bar.SetInitialGuess(0.1)
+                        self.m.particles[tr][i, j].c2bar.SetInitialGuess(cs2)
+                        Nij = config["psd_num"][tr][i,j]
+                        epsrnd = 0
+                        rnd1 = epsrnd*(np.random.rand(Nij) - 0.5)
+                        rnd2 = epsrnd*(np.random.rand(Nij) - 0.5)
+                        rnd1 -= np.mean(rnd1)
+                        rnd2 -= np.mean(rnd2)
+                        for k in range(Nij):
+                            self.m.particles[tr][i,j].c1.SetInitialCondition(k, 0.1+rnd1[k])
+                            self.m.particles[tr][i, j].c2.SetInitialCondition(k, cs2)
+                    
                 for i in range(Nvol[tr]):
                     # Guess initial volumetric reaction rates
                     if config["MultiCation"]:
@@ -94,20 +124,21 @@ class SimMPET(dae.daeSimulation):
                         # concentrations and set initial value for
                         # solid concentrations
                         solidType = self.config[tr, "type"]
-                        part.c1bar.SetInitialGuess(cs1)
-                        part.c2bar.SetInitialGuess(cs2)
-                        epsrnd = 0.0001
-                        rnd1 = epsrnd*(np.random.rand(Nij) - 0.5)
-                        rnd2 = epsrnd*(np.random.rand(Nij) - 0.5)
-                        rnd1 -= np.mean(rnd1)
-                        rnd2 -= np.mean(rnd2)
-                        for k in range(Nij):
-                            if self.config[tr,'type'] not in ['ACR2']:
-                                if self.config[tr,'intralayer_rxn']:
-                                    part.interLayerRxn.SetInitialGuess(k, 0.0)
-                            if config['cs1'][tr] is not None:
-                                part.c1.SetInitialCondition(k, cs1+rnd1[k])
-                                part.c2.SetInitialCondition(k, cs2+rnd2[k])
+                        if mosaic == False:
+                            part.c1bar.SetInitialGuess(cs1)
+                            part.c2bar.SetInitialGuess(cs2)
+                            epsrnd = 0
+                            rnd1 = epsrnd*(np.random.rand(Nij) - 0.5)
+                            rnd2 = epsrnd*(np.random.rand(Nij) - 0.5)
+                            rnd1 -= np.mean(rnd1)
+                            rnd2 -= np.mean(rnd2)
+                            for k in range(Nij):
+                                if self.config[tr,'type'] not in ['ACR2']:
+                                    if self.config[tr,'intralayer_rxn']:
+                                        part.interLayerRxn.SetInitialGuess(k, 0.0)
+                                if config['cs1'][tr] is not None:
+                                    part.c1.SetInitialCondition(k, cs1+rnd1[k])
+                                    part.c2.SetInitialCondition(k, cs2+rnd2[k])
 
             # Cell potential initialization
             if config['tramp'] > 0:
@@ -137,10 +168,17 @@ class SimMPET(dae.daeSimulation):
 
             # Separator electrolyte initialization
             if config["have_separator"]:
-                for i in range(Nvol["s"]):
-                    self.m.c_lyte["s"].SetInitialCondition(i, config['c0'])
-                    self.m.T_lyte["s"].SetInitialCondition(i, config['T'])
-                    self.m.phi_lyte["s"].SetInitialGuess(i, 0)
+                if self.config["MultiCation"]:
+                    for i in range(Nvol["s"]):
+                        self.m.c_lyte["s"].SetInitialCondition(i, config['c01'])
+                        self.m.c_lyte["s"].SetInitialCondition(i, config['c02'])
+                        self.m.T_lyte["s"].SetInitialCondition(i, config['T'])
+                        self.m.phi_lyte["s"].SetInitialGuess(i, 0)
+                else:    
+                    for i in range(Nvol["s"]):
+                        self.m.c_lyte["s"].SetInitialCondition(i, config['c0'])
+                        self.m.T_lyte["s"].SetInitialCondition(i, config['T'])
+                        self.m.phi_lyte["s"].SetInitialGuess(i, 0)
 
             # Anode and cathode electrolyte initialization
             for tr in config["trodes"]:
